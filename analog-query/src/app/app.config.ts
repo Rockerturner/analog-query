@@ -8,6 +8,7 @@ import { provideClientHydration } from '@angular/platform-browser';
 import { provideFileRouter, requestContextInterceptor } from '@analogjs/router';
 
 import { provideTrpcClient } from '../trpc-client';
+import { provideTanStackQuery, QueryClient, withDevtools } from '@tanstack/angular-query-experimental';
 
 
 export const appConfig: ApplicationConfig = {
@@ -19,6 +20,7 @@ export const appConfig: ApplicationConfig = {
       withFetch(),
       withInterceptors([requestContextInterceptor])
     ),
+    provideTanStackQuery(new QueryClient(), withDevtools()),
 
     provideTrpcClient(),
 

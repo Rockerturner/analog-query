@@ -1,15 +1,16 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { AsyncPipe, DatePipe, NgFor, NgIf } from '@angular/common';
 import { FormsModule, NgForm } from '@angular/forms';
-import { shareReplay, Subject, switchMap, take } from 'rxjs';
+import { lastValueFrom, shareReplay, Subject, switchMap, take } from 'rxjs';
 import { waitFor } from '@analogjs/trpc';
 import { injectTrpcClient } from '../../trpc-client';
 import { Note } from '../../note';
+import { injectMutation, injectQuery, QueryClient } from '@tanstack/angular-query-experimental';
 
 @Component({
   selector: 'analog-query-analog-welcome',
   
-  imports: [AsyncPipe, FormsModule, NgFor, DatePipe, NgIf],
+  imports: [FormsModule, NgFor, DatePipe, NgIf],
   host: {
     class:
       'flex min-h-screen flex-col text-zinc-900 bg-zinc-50 px-4 pt-8 pb-32',
@@ -71,7 +72,7 @@ import { Note } from '../../note';
         <form
           class="mt-8 pb-2 flex items-center"
           #f="ngForm"
-          (ngSubmit)="addNote(f)"
+          (ngSubmit)="onAdd(f)"
         >
           <label class="sr-only" for="newNote"> Note </label>
           <input
@@ -87,7 +88,7 @@ import { Note } from '../../note';
             +
           </button>
         </form>
-        <div class="mt-4" *ngIf="notes$ | async as notes; else loading">
+        <div class="mt-4" *ngIf="notes.data() as notes; else loading">
           <div
             class="note mb-4 p-4 font-normal border border-input rounded-md"
             *ngFor="let note of notes; trackBy: noteTrackBy; let i = index"
@@ -97,7 +98,7 @@ import { Note } from '../../note';
               <button
                 [attr.data-testid]="'removeNoteAtIndexBtn' + i"
                 class="inline-flex items-center justify-center text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background hover:bg-zinc-100 hover:text-zinc-950 h-6 w-6 rounded-md"
-                (click)="removeNote(note.id)"
+                (click)="onRemove(note.id)"
               >
                 x
               </button>
@@ -124,39 +125,75 @@ import { Note } from '../../note';
 })
 export class AnalogWelcomeComponent {
   private _trpc = injectTrpcClient();
-  public triggerRefresh$ = new Subject<void>();
-  public notes$ = this.triggerRefresh$.pipe(
-    switchMap(() => this._trpc.note.list.query()),
-    shareReplay(1)
-  );
+  private _queryClient = inject(QueryClient)
+
   public newNote = '';
 
-  constructor() {
-    void waitFor(this.notes$);
-    this.triggerRefresh$.next();
+  notes = injectQuery(() => ({
+    queryKey: ['notes'],
+    queryFn: () => lastValueFrom(this._trpc.note.list.query())
+  }));
+
+  addNote = injectMutation(() => ({
+    mutationFn: (note: string) => lastValueFrom(this._trpc.note.create.mutate({note: note})),
+    onSuccess: () => this._queryClient.invalidateQueries({queryKey: ['notes']})
+  }));
+
+  removeNote = injectMutation(() => ({
+    mutationFn: (id: number) => lastValueFrom(this._trpc.note.remove.mutate({id: id})),
+    onSuccess: () => this._queryClient.invalidateQueries({queryKey: ['notes']})
+  }));
+
+  public onAdd(form: NgForm) {
+    if (!form.valid) {
+      form.form.markAllAsTouched();
+      return;
+    }
+    this.addNote.mutate(this.newNote);
+    this.newNote = '';
+    form.form.reset();
+  }
+
+  public onRemove(id: number) {
+    this.removeNote.mutate(id);
   }
 
   public noteTrackBy = (index: number, note: Note) => {
     return note.id;
   };
 
-  public addNote(form: NgForm) {
-    if (!form.valid) {
-      form.form.markAllAsTouched();
-      return;
-    }
-    this._trpc.note.create
-      .mutate({ note: this.newNote })
-      .pipe(take(1))
-      .subscribe(() => this.triggerRefresh$.next());
-    this.newNote = '';
-    form.form.reset();
-  }
 
-  public removeNote(id: number) {
-    this._trpc.note.remove
-      .mutate({ id })
-      .pipe(take(1))
-      .subscribe(() => this.triggerRefresh$.next());
-  }
+  // public triggerRefresh$ = new Subject<void>();
+  // public notes$ = this.triggerRefresh$.pipe(
+  //   switchMap(() => this._trpc.note.list.query()),
+  //   shareReplay(1)
+  // );
+  // public newNote = '';
+
+  // constructor() {
+  //   void waitFor(this.notes$);
+  //   this.triggerRefresh$.next();
+  // }
+
+  
+
+  // public addNote(form: NgForm) {
+  //   if (!form.valid) {
+  //     form.form.markAllAsTouched();
+  //     return;
+  //   }
+  //   this._trpc.note.create
+  //     .mutate({ note: this.newNote })
+  //     .pipe(take(1))
+  //     .subscribe(() => this.triggerRefresh$.next());
+  //   this.newNote = '';
+  //   form.form.reset();
+  // }
+
+  // public removeNote(id: number) {
+  //   this._trpc.note.remove
+  //     .mutate({ id })
+  //     .pipe(take(1))
+  //     .subscribe(() => this.triggerRefresh$.next());
+  // }
 }
