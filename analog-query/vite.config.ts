@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     cacheDir: `../node_modules/.vite`,
     
     ssr: {
-      noExternal: ['@analogjs/trpc','@trpc/server'],
+      noExternal: ['@analogjs/trpc','@trpc/server', '@tanstack/angular-query-experimental'],
     },
     
     build: {
